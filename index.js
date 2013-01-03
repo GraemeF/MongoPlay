@@ -1,4 +1,5 @@
 var mongodb = require('mongodb');
+var uuid = require('node-uuid');
 require('chai').should();
 
 var client = new mongodb.Db('millions', new mongodb.Server("192.168.0.162", 27017, {}), {
@@ -10,7 +11,8 @@ var packages = 50;
 var files = 60;
 
 var insertDevice = function(device, collection, callback) {
-    console.log('inserting device ' + device);
+    var name = uuid.v4();
+
     for (var packageNo = 1; packageNo <= packages; packageNo++) {
       for (var file = 1; file <= files; file++) {
         var options;
@@ -31,7 +33,10 @@ var insertDevice = function(device, collection, callback) {
         }
 
         collection.insert({
-          device: 'device ' + device,
+          device: {
+            number: device,
+            name: name
+          },
           package: {
             name: 'package ' + packageNo
           },
@@ -46,22 +51,23 @@ var insertDevice = function(device, collection, callback) {
 
 var insertEverything = function(err, collection) {
     function doneDevice(err, result) {
-      //console.log(JSON.stringify(result));
-      var device = parseInt(result[0].device.substr(6));
+      var device = result[0].device.number;
       process.nextTick(function() {
-        //console.log('called back ' + device + '/' + devices);
         if (device < devices) {
           insertDevice(++device, collection, doneDevice);
-          console.log('device ' + device);
         } else {
-          console.log('done');
+          console.log('done at ', Date());
           client.close();
         }
       });
-    };
+    }
 
-    insertDevice(1, collection, doneDevice);
-  }
+    collection.ensureIndex({'device.name': 1, 'package.name': 1, 'file.name': 1}, function () {
+      insertDevice(1, collection, doneDevice);
+    });
+  };
+
+console.log('started at', Date());
 
 client.open(function(err, p_client) {
   client.collection('sccm_inventory', insertEverything);
